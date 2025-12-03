@@ -406,6 +406,7 @@ const send_admin_page = (args) => {
       { text: "Backup", href: "/admin/backup" },
       { text: "Email", href: "/admin/email" },
       { text: "System", href: "/admin/system" },
+      { text: "Performance", href: "/admin/performance" },
       { text: "Mobile app", href: "/admin/build-mobile-app" },
       { text: "Development", href: "/admin/dev" },
       { text: "Notifications", href: "/admin/notifications" },
