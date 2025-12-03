@@ -773,10 +773,11 @@ router.post(
         } else {
           // Legacy: no version checking for backward compatibility
           await Page.update(+id, { layout });
-          const updatedPage = await Page.findOne({ id });
+          await getState().refresh_pages();
+          const updatedPage = Page.findOne({ id });
           newVersion = updatedPage?.version || 1;
         }
-        const page = await Page.findOne({ id });
+        const page = Page.findOne({ id });
         await getState().refresh_pages();
 
         Trigger.emitEvent("AppChange", `Page ${page.name}`, req.user, {

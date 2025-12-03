@@ -913,6 +913,7 @@ router.post(
         } else {
           // Legacy: no version checking for backward compatibility
           await View.update({ configuration: newcfg }, +id);
+          await getState().refresh_views();
           const updatedView = View.findOne({ id });
           newVersion = updatedView?.version || 1;
         }
