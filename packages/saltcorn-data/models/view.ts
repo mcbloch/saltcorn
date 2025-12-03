@@ -13,6 +13,7 @@ const {
   removeEmptyStringsKeepNull,
   stringToJSON,
   InvalidConfiguration,
+  VersionConflict,
   satisfies,
   structuredClone,
   isNode,
@@ -74,6 +75,7 @@ class View implements AbstractView {
   table?: AbstractTable;
   singleton?: boolean;
   slug?: any;
+  version?: number;
 
   /**
    * View constructor
@@ -82,6 +84,7 @@ class View implements AbstractView {
   constructor(o: ViewCfg | View) {
     this.name = o.name;
     this.id = o.id;
+    this.version = o.version;
     this.viewtemplate = o.viewtemplate;
     this.exttable_name = o.exttable_name;
     this.description = o.description;
@@ -395,6 +398,39 @@ class View implements AbstractView {
     // fresh view list cache
     if (!db.getRequestContext()?.client)
       await require("../db/state").getState().refresh_views(true);
+  }
+
+  /**
+   * Update view with version checking for optimistic locking
+   * @param v - View data to update
+   * @param id - View ID
+   * @param expectedVersion - The version the client expects the view to be at
+   * @returns {Promise<number>} - The new version number
+   * @throws {VersionConflict} - If the view has been modified since expectedVersion
+   */
+  static async updateWithVersion(
+    v: any,
+    id: number,
+    expectedVersion: number
+  ): Promise<number> {
+    const currentView = View.findOne({ id });
+    if (!currentView) {
+      throw new Error(`View with id ${id} not found`);
+    }
+
+    const currentVersion = currentView.version || 1;
+    if (currentVersion !== expectedVersion) {
+      throw new VersionConflict(
+        `View has been modified by another user. Your version: ${expectedVersion}, Current version: ${currentVersion}`,
+        currentVersion
+      );
+    }
+
+    const newVersion = currentVersion + 1;
+    await db.update("_sc_views", { ...v, version: newVersion }, id);
+    if (!db.getRequestContext()?.client)
+      await require("../db/state").getState().refresh_views(true);
+    return newVersion;
   }
 
   /**

@@ -85,10 +85,17 @@ export /**
 const InitNewElement = ({ nodekeys, savingState, setSavingState }) => {
   const [saveTimeout, setSaveTimeout] = useState(false);
   const savedData = useRef(false);
+  const versionRef = useRef(null);
   const { actions, query, connectors } = useEditor((state, query) => {
     return {};
   });
   const options = useContext(optionsCtx);
+  
+  // Initialize version from options
+  if (versionRef.current === null) {
+    versionRef.current = options.page_version || options.view_version || 1;
+  }
+  
   const doSave = (query, keepalive) => {
     if (!query.serialize) return;
 
@@ -108,6 +115,12 @@ const InitNewElement = ({ nodekeys, savingState, setSavingState }) => {
     savedData.current = JSON.stringify(data.layout);
     setSavingState({ isSaving: true });
 
+    // Include version in the request
+    const requestData = {
+      ...data,
+      version: versionRef.current,
+    };
+
     fetch(`/${urlroot}/savebuilder/${options.page_id || options.view_id}`, {
       method: "POST", // or 'PUT'
       keepalive,//this is conditional bec body size is limited to 64KB
@@ -115,16 +128,34 @@ const InitNewElement = ({ nodekeys, savingState, setSavingState }) => {
         "Content-Type": "application/json",
         "CSRF-Token": options.csrfToken,
       },
-      body: JSON.stringify(data),
+      body: JSON.stringify(requestData),
     })
       .then((response) => {
-        response.json().then((data) => {
-          if (typeof data?.error === "string") {
+        response.json().then((responseData) => {
+          if (responseData?.version_conflict) {
+            // Handle version conflict - show a special error with options
+            setSavingState({ 
+              isSaving: false, 
+              error: responseData.error,
+              versionConflict: true,
+              currentVersion: responseData.current_version 
+            });
+            window.notifyAlert({ 
+              type: "danger", 
+              text: responseData.error + " Please reload the page to get the latest version." 
+            });
+          } else if (typeof responseData?.error === "string") {
             // don't log duplicates
             if (!savingState.error)
-              window.notifyAlert({ type: "danger", text: data.error });
-            setSavingState({ isSaving: false, error: data.error });
-          } else setSavingState({ isSaving: false });
+              window.notifyAlert({ type: "danger", text: responseData.error });
+            setSavingState({ isSaving: false, error: responseData.error });
+          } else {
+            // Success - update the version
+            if (responseData?.version) {
+              versionRef.current = responseData.version;
+            }
+            setSavingState({ isSaving: false });
+          }
         });
       })
       .catch((e) => {

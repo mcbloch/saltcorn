@@ -609,7 +609,19 @@ const Builder = ({ options, layout, mode }) => {
                           savingState.error ? "d-block" : "d-none"
                         } my-2 fw-bold`}
                       >
-                        your work is not being saved
+                        {savingState.versionConflict ? (
+                          <div>
+                            <span>Version conflict - changes cannot be saved</span>
+                            <button
+                              className="btn btn-sm btn-warning ms-2"
+                              onClick={() => window.location.reload()}
+                            >
+                              Reload page
+                            </button>
+                          </div>
+                        ) : (
+                          "your work is not being saved"
+                        )}
                       </div>
                       <SettingsPanel />
                     </div>

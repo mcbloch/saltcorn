@@ -10,6 +10,7 @@ export interface AbstractView {
   table_name?: string;
   min_role: number;
   attributes?: any;
+  version?: number;
   connected_objects: () => Promise<ConnectedObjects>;
   getTags(): Promise<Array<AbstractTag>>;
 }
@@ -17,6 +18,7 @@ export interface AbstractView {
 export type ViewCfg = {
   name: string;
   id?: number;
+  version?: number;
   viewtemplate: string;
   table_id?: number | null;
   table?: AbstractTable;

@@ -42,6 +42,7 @@ const { run_action_column, stateToQueryString } = require("../plugin-helper");
 import { extractFromLayout } from "../diagram/node_extract_utils";
 const {
   InvalidConfiguration,
+  VersionConflict,
   satisfies,
   structuredClone,
   isWeb,
@@ -70,6 +71,7 @@ class Page implements AbstractPage {
   layout: Layout;
   fixed_states: any;
   attributes?: any;
+  version?: number;
 
   /**
    * @param {object} o
@@ -80,6 +82,7 @@ class Page implements AbstractPage {
     this.description = o.description;
     this.min_role = +o.min_role;
     this.id = o.id;
+    this.version = o.version;
     this.attributes = stringToJSON(o.attributes);
 
     this.layout =
@@ -143,6 +146,39 @@ class Page implements AbstractPage {
     await db.update("_sc_pages", row, id);
     if (!db.getRequestContext()?.client)
       await require("../db/state").getState().refresh_pages(true);
+  }
+
+  /**
+   * Update page with version checking for optimistic locking
+   * @param id - Page ID
+   * @param row - Row data to update
+   * @param expectedVersion - The version the client expects the page to be at
+   * @returns {Promise<number>} - The new version number
+   * @throws {VersionConflict} - If the page has been modified since expectedVersion
+   */
+  static async updateWithVersion(
+    id: number,
+    row: Row,
+    expectedVersion: number
+  ): Promise<number> {
+    const currentPage = await Page.findOne({ id });
+    if (!currentPage) {
+      throw new Error(`Page with id ${id} not found`);
+    }
+
+    const currentVersion = currentPage.version || 1;
+    if (currentVersion !== expectedVersion) {
+      throw new VersionConflict(
+        `Page has been modified by another user. Your version: ${expectedVersion}, Current version: ${currentVersion}`,
+        currentVersion
+      );
+    }
+
+    const newVersion = currentVersion + 1;
+    await db.update("_sc_pages", { ...row, version: newVersion }, id);
+    if (!db.getRequestContext()?.client)
+      await require("../db/state").getState().refresh_pages(true);
+    return newVersion;
   }
 
   static async state_refresh() {
