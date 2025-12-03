@@ -69,6 +69,44 @@ describe("db page", () => {
     await request(app).get("/page/b_page").expect(toInclude("not found", 404));
   });
 });
+
+describe("Open Graph meta tags", () => {
+  it("includes og:title meta tag", async () => {
+    const app = await getApp({ disableCsrf: true });
+    await request(app)
+      .get("/page/a_page")
+      .expect(toInclude('<meta property="og:title"'));
+  });
+
+  it("includes og:type meta tag", async () => {
+    const app = await getApp({ disableCsrf: true });
+    await request(app)
+      .get("/page/a_page")
+      .expect(toInclude('<meta property="og:type" content="website">'));
+  });
+
+  it("includes og:site_name meta tag", async () => {
+    const app = await getApp({ disableCsrf: true });
+    await request(app)
+      .get("/page/a_page")
+      .expect(toInclude('<meta property="og:site_name"'));
+  });
+
+  it("includes twitter:card meta tag", async () => {
+    const app = await getApp({ disableCsrf: true });
+    await request(app)
+      .get("/page/a_page")
+      .expect(toInclude('<meta name="twitter:card" content="summary">'));
+  });
+
+  it("includes twitter:title meta tag", async () => {
+    const app = await getApp({ disableCsrf: true });
+    await request(app)
+      .get("/page/a_page")
+      .expect(toInclude('<meta name="twitter:title"'));
+  });
+});
+
 describe("page create", () => {
   it("show new", async () => {
     const app = await getApp({ disableCsrf: true });
