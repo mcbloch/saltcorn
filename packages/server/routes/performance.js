@@ -49,8 +49,6 @@ module.exports = router;
  * @returns {Promise<object>}
  */
 const getPerformanceStats = async () => {
-  const schema = db.getTenantSchemaPrefix();
-  
   // Get page/view load events with render_time from the last 24 hours
   const oneDayAgo = new Date(Date.now() - 24 * 60 * 60 * 1000);
   
@@ -125,7 +123,6 @@ const getPerformanceStats = async () => {
  * @returns {Promise<Array>}
  */
 const getSlowRequests = async (threshold = 1000) => {
-  const schema = db.getTenantSchemaPrefix();
   const oneDayAgo = new Date(Date.now() - 24 * 60 * 60 * 1000);
   
   const recentEvents = await EventLog.find(
@@ -191,12 +188,11 @@ router.get(
     // Get database pool stats if available
     let poolStats = { totalCount: 0, idleCount: 0, waitingCount: 0 };
     try {
-      const pool = db.pool;
-      if (pool) {
+      if (db.pool) {
         poolStats = {
-          totalCount: pool.totalCount || 0,
-          idleCount: pool.idleCount || 0,
-          waitingCount: pool.waitingCount || 0,
+          totalCount: db.pool.totalCount || 0,
+          idleCount: db.pool.idleCount || 0,
+          waitingCount: db.pool.waitingCount || 0,
         };
       }
     } catch (e) {
@@ -440,7 +436,9 @@ router.get(
   isAdmin,
   error_catcher(async (req, res) => {
     const stats = await getPerformanceStats();
-    const slowRequests = await getSlowRequests(parseInt(req.query.threshold) || 500);
+    const thresholdParam = parseInt(req.query.threshold, 10);
+    const threshold = Number.isFinite(thresholdParam) && thresholdParam > 0 ? thresholdParam : 500;
+    const slowRequests = await getSlowRequests(threshold);
     
     res.json({
       success: true,
