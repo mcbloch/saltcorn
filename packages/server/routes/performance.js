@@ -5,8 +5,8 @@
  * @subcategory routes
  */
 const Router = require("express-promise-router");
-const { isAdmin, error_catcher } = require("./utils.js");
-const { getState } = require("@saltcorn/data/db/state");
+const { isAdmin, error_catcher, get_sys_info } = require("./utils.js");
+const { getState, get_process_init_time } = require("@saltcorn/data/db/state");
 const db = require("@saltcorn/data/db");
 const { mkTable, localeDateTime } = require("@saltcorn/markup");
 const {
@@ -25,6 +25,9 @@ const {
   pre,
   text,
   i,
+  small,
+  ul,
+  li,
 } = require("@saltcorn/markup/tags");
 const { send_admin_page } = require("../markup/admin.js");
 const EventLog = require("@saltcorn/data/models/eventlog");
@@ -170,11 +173,40 @@ router.get(
     const stats = await getPerformanceStats();
     const slowRequests = await getSlowRequests(500);
     const locale = getState().getConfig("default_locale", "en");
+    
+    // Get system info
+    let sysInfo = { memUsage: 0, diskUsage: 0, cpuUsage: 0 };
+    try {
+      sysInfo = await get_sys_info();
+    } catch (e) {
+      // System info might not be available in some environments
+    }
+    
+    // Get uptime
+    const processInitTime = get_process_init_time();
+    const uptimeMs = processInitTime ? Date.now() - processInitTime.getTime() : 0;
+    const uptimeHours = Math.floor(uptimeMs / (1000 * 60 * 60));
+    const uptimeMins = Math.floor((uptimeMs % (1000 * 60 * 60)) / (1000 * 60));
+    
+    // Get database pool stats if available
+    let poolStats = { totalCount: 0, idleCount: 0, waitingCount: 0 };
+    try {
+      const pool = db.pool;
+      if (pool) {
+        poolStats = {
+          totalCount: pool.totalCount || 0,
+          idleCount: pool.idleCount || 0,
+          waitingCount: pool.waitingCount || 0,
+        };
+      }
+    } catch (e) {
+      // Pool stats might not be available
+    }
 
     const viewsTable = stats.views.length > 0
       ? mkTable(
           [
-            { label: req.__("View Name"), key: "name" },
+            { label: req.__("View Name"), key: (r) => a({ href: `/admin/performance/detail/view/${encodeURIComponent(r.name)}` }, r.name) },
             { label: req.__("Requests"), key: "count", align: "right" },
             { label: req.__("Avg (ms)"), key: (r) => formatTime(r.avgTime), align: "right" },
             { label: req.__("Min (ms)"), key: (r) => formatTime(r.minTime), align: "right" },
@@ -190,7 +222,7 @@ router.get(
     const pagesTable = stats.pages.length > 0
       ? mkTable(
           [
-            { label: req.__("Page Name"), key: "name" },
+            { label: req.__("Page Name"), key: (r) => a({ href: `/admin/performance/detail/page/${encodeURIComponent(r.name)}` }, r.name) },
             { label: req.__("Requests"), key: "count", align: "right" },
             { label: req.__("Avg (ms)"), key: (r) => formatTime(r.avgTime), align: "right" },
             { label: req.__("Min (ms)"), key: (r) => formatTime(r.minTime), align: "right" },
@@ -225,6 +257,77 @@ router.get(
           "."
         )
       : "";
+    
+    // System metrics card
+    const sysMetricsCard = {
+      type: "card",
+      title: req.__("System Resources"),
+      contents: div(
+        { class: "row" },
+        div(
+          { class: "col-md-3" },
+          div(
+            { class: "card bg-light mb-3" },
+            div(
+              { class: "card-body text-center" },
+              h5({ class: "card-title" }, req.__("CPU Usage")),
+              h4({ class: sysInfo.cpuUsage > 80 ? "text-danger" : sysInfo.cpuUsage > 60 ? "text-warning" : "text-success" }, 
+                `${sysInfo.cpuUsage}%`)
+            )
+          )
+        ),
+        div(
+          { class: "col-md-2" },
+          div(
+            { class: "card bg-light mb-3" },
+            div(
+              { class: "card-body text-center" },
+              h5({ class: "card-title" }, req.__("Memory Usage")),
+              h4({ class: sysInfo.memUsage > 90 ? "text-danger" : sysInfo.memUsage > 70 ? "text-warning" : "text-success" }, 
+                `${sysInfo.memUsage}%`)
+            )
+          )
+        ),
+        div(
+          { class: "col-md-2" },
+          div(
+            { class: "card bg-light mb-3" },
+            div(
+              { class: "card-body text-center" },
+              h5({ class: "card-title" }, req.__("Disk Usage")),
+              h4({ class: sysInfo.diskUsage > 90 ? "text-danger" : sysInfo.diskUsage > 70 ? "text-warning" : "text-success" }, 
+                `${sysInfo.diskUsage}%`)
+            )
+          )
+        ),
+        div(
+          { class: "col-md-2" },
+          div(
+            { class: "card bg-light mb-3" },
+            div(
+              { class: "card-body text-center" },
+              h5({ class: "card-title" }, req.__("Server Uptime")),
+              h4(`${uptimeHours}h ${uptimeMins}m`)
+            )
+          )
+        ),
+        div(
+          { class: "col-md-4" },
+          div(
+            { class: "card bg-light mb-3" },
+            div(
+              { class: "card-body text-center" },
+              h5({ class: "card-title" }, req.__("DB Pool")),
+              h4(
+                small(req.__("Total: ")), poolStats.totalCount, " ",
+                small(req.__("Idle: ")), poolStats.idleCount, " ",
+                small(req.__("Wait: ")), poolStats.waitingCount
+              )
+            )
+          )
+        )
+      ),
+    };
 
     send_admin_page({
       res,
@@ -233,6 +336,7 @@ router.get(
       contents: {
         above: [
           enableEventLoggingInfo,
+          sysMetricsCard,
           {
             type: "card",
             title: req.__("Performance Overview"),
@@ -292,6 +396,31 @@ router.get(
             type: "card",
             title: req.__("Recent Slow Requests (>500ms)"),
             contents: slowTable,
+          },
+          {
+            type: "card",
+            title: req.__("Performance Tips"),
+            contents: div(
+              { class: "alert alert-light" },
+              h5({ class: "alert-heading" }, i({ class: "fas fa-lightbulb me-2" }), req.__("Recommendations")),
+              ul(
+                li(req.__("Enable PageLoad event logging to collect performance data.")),
+                li(req.__("Views/pages with avg render time > 500ms may need optimization.")),
+                li(req.__("Check slow requests to identify specific problematic queries.")),
+                li(req.__("Consider caching for frequently accessed views with high render times.")),
+                li(req.__("Monitor CPU and memory usage for system-level bottlenecks.")),
+                li(req.__("High DB pool waiting count may indicate connection pool exhaustion."))
+              ),
+              p(
+                { class: "mb-0" },
+                small(
+                  req.__("Color coding: "),
+                  span({ class: "text-success me-2" }, req.__("Green < 500ms (good)")),
+                  span({ class: "text-warning me-2" }, req.__("Yellow 500-1000ms (moderate)")),
+                  span({ class: "text-danger" }, req.__("Red > 1000ms (slow)"))
+                )
+              )
+            ),
           },
         ],
       },

@@ -30,6 +30,15 @@ describe("performance page", () => {
       .expect(toInclude("Performance Overview"));
   });
 
+  it("should show system resources section", async () => {
+    const app = await getApp({ disableCsrf: true });
+    const loginCookie = await getAdminLoginCookie();
+    await request(app)
+      .get("/admin/performance")
+      .set("Cookie", loginCookie)
+      .expect(toInclude("System Resources"));
+  });
+
   it("should show view performance section", async () => {
     const app = await getApp({ disableCsrf: true });
     const loginCookie = await getAdminLoginCookie();
@@ -48,6 +57,15 @@ describe("performance page", () => {
       .expect(toInclude("Page Performance"));
   });
 
+  it("should show performance tips section", async () => {
+    const app = await getApp({ disableCsrf: true });
+    const loginCookie = await getAdminLoginCookie();
+    await request(app)
+      .get("/admin/performance")
+      .set("Cookie", loginCookie)
+      .expect(toInclude("Performance Tips"));
+  });
+
   it("should have API endpoint", async () => {
     const app = await getApp({ disableCsrf: true });
     const loginCookie = await getAdminLoginCookie();
@@ -60,6 +78,8 @@ describe("performance page", () => {
     expect(response.body).toHaveProperty("stats");
     expect(response.body.stats).toHaveProperty("views");
     expect(response.body.stats).toHaveProperty("pages");
+    expect(response.body.stats).toHaveProperty("totalEvents");
+    expect(response.body.stats).toHaveProperty("timeWindow");
   });
 
   it("should redirect unauthenticated users", async () => {
