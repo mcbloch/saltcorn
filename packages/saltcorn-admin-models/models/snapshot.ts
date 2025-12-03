@@ -43,7 +43,7 @@ class Snapshot {
   constructor(o: SnapshotCfg | Snapshot) {
     this.id = o.id;
     this.created = o.created;
-    this.pack = o.pack;
+    this.pack = typeof o.pack === "string" ? JSON.parse(o.pack) : o.pack;
     this.hash = o.hash;
     this.name = o.name;
   }

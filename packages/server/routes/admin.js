@@ -131,9 +131,103 @@ const MarkdownIt = require("markdown-it"),
   md = new MarkdownIt();
 const semver = require("semver");
 const { dbCommonModulePath } = require("@saltcorn/db-common/internal");
+const { isEqual } = require("lodash");
 
 const router = new Router();
 module.exports = router;
+
+/**
+ * Get entity from a snapshot pack by type and name
+ * @param {object} pack - The snapshot pack
+ * @param {string} type - Entity type (view, page, trigger, codepage)
+ * @param {string} name - Entity name
+ * @returns {object|null}
+ */
+const getEntityFromPack = (pack, type, name) => {
+  switch (type) {
+    case "view":
+      return pack.views?.find((v) => v.name === name) || null;
+    case "page":
+      return pack.pages?.find((p) => p.name === name) || null;
+    case "trigger":
+      return pack.triggers?.find((t) => t.name === name) || null;
+    case "codepage":
+      return pack.code_pages?.find((c) => c.name === name) || null;
+    case "pagegroup":
+      return pack.page_groups?.find((pg) => pg.name === name) || null;
+    default:
+      return null;
+  }
+};
+
+/**
+ * Get current entity pack for comparison
+ * @param {string} type - Entity type
+ * @param {string} name - Entity name
+ * @returns {Promise<object|null>}
+ */
+const getCurrentEntityPack = async (type, name) => {
+  const {
+    page_pack,
+    view_pack,
+    trigger_pack,
+    page_group_pack,
+  } = require("@saltcorn/admin-models/models/pack");
+
+  switch (type) {
+    case "view":
+      return await view_pack(name);
+    case "page":
+      return await page_pack(name);
+    case "trigger":
+      return await trigger_pack(name);
+    case "pagegroup":
+      return await page_group_pack(name);
+    case "codepage":
+      const code_pages = getState().getConfigCopy("function_code_pages", {});
+      if (code_pages[name]) {
+        return { name, code: code_pages[name] };
+      }
+      return null;
+    default:
+      return null;
+  }
+};
+
+/**
+ * Generate human-readable differences between two objects
+ * @param {object} current - Current entity
+ * @param {object} snapshot - Snapshot entity
+ * @param {string} type - Entity type for context
+ * @returns {Array<object>} Array of {field, current, snapshot} differences
+ */
+const generateDiff = (current, snapshot, type) => {
+  const differences = [];
+  const allKeys = new Set([
+    ...Object.keys(current || {}),
+    ...Object.keys(snapshot || {}),
+  ]);
+
+  // Fields to skip in comparison (internal/metadata fields)
+  const skipFields = ["id", "table_id"];
+
+  for (const key of allKeys) {
+    if (skipFields.includes(key)) continue;
+
+    const currentVal = current?.[key];
+    const snapshotVal = snapshot?.[key];
+
+    if (!isEqual(currentVal, snapshotVal)) {
+      differences.push({
+        field: key,
+        current: currentVal,
+        snapshot: snapshotVal,
+      });
+    }
+  }
+
+  return differences;
+};
 
 const app_files_table = (files, buildDirName, req) =>
   mkTable(
@@ -827,15 +921,15 @@ router.get(
             key: (r) => r.name || "",
           },
           {
-            label: req.__("Restore"),
+            label: req.__("Preview & Restore"),
             key: (r) =>
-              post_btn(
-                addOnDoneRedirect(
-                  `/admin/snapshot-restore/${type}/${name}/${r.id}`,
-                  req
-                ),
-                req.__("Restore"),
-                req.csrfToken()
+              a(
+                {
+                  href: `javascript:ajax_modal('/admin/snapshot-preview/${type}/${encodeURIComponent(name)}/${r.id}')`,
+                  class: "btn btn-primary btn-sm",
+                },
+                i({ class: "fas fa-eye me-1" }),
+                req.__("Preview Changes")
               ),
           },
         ],
@@ -882,6 +976,136 @@ router.post(
             : /^[a-z]+$/g.test(type)
               ? `/${type}edit`
               : "/"
+    );
+  })
+);
+
+/**
+ * Preview changes before restoring a snapshot
+ * Shows diff between current entity and snapshot version
+ * @name get/snapshot-preview/:type/:name/:id
+ * @function
+ * @memberof module:routes/admin~routes/adminRouter
+ */
+router.get(
+  "/snapshot-preview/:type/:name/:id",
+  isAdminOrHasConfigMinRole([
+    "min_role_edit_views",
+    "min_role_edit_pages",
+    "min_role_edit_triggers",
+  ]),
+  error_catcher(async (req, res) => {
+    const { type, name, id } = req.params;
+    const auth = checkEditPermission(type + "s", req.user);
+    if (!auth) {
+      res.send(req.__("Not authorized"));
+      return;
+    }
+
+    const snap = await Snapshot.findOne({ id });
+    if (!snap) {
+      res.send(req.__("Snapshot not found"));
+      return;
+    }
+
+    const snapshotEntity = getEntityFromPack(snap.pack, type, name);
+    if (!snapshotEntity) {
+      res.send(req.__("Entity not found in snapshot"));
+      return;
+    }
+
+    let currentEntity;
+    try {
+      currentEntity = await getCurrentEntityPack(type, name);
+    } catch (e) {
+      currentEntity = null;
+    }
+
+    const differences = generateDiff(currentEntity, snapshotEntity, type);
+    const locale = getState().getConfig("default_locale", "en");
+
+    const formatValue = (val) => {
+      if (val === undefined) return span({ class: "text-muted" }, req.__("(not set)"));
+      if (val === null) return span({ class: "text-muted" }, "null");
+      if (typeof val === "object") {
+        return pre(
+          { class: "mb-0", style: "max-height: 200px; overflow: auto; font-size: 0.8em;" },
+          JSON.stringify(val, null, 2)
+        );
+      }
+      return code(String(val));
+    };
+
+    res.set("Page-Title", req.__("Preview Changes: %s", text(name)));
+    res.send(
+      div(
+        { class: "container-fluid" },
+        h4(
+          req.__(
+            "Restoring %s to snapshot from %s",
+            text(name),
+            moment(snap.created).fromNow()
+          )
+        ),
+        p(
+          { class: "text-muted" },
+          req.__("Snapshot created: %s", localeDateTime(snap.created, {}, locale))
+        ),
+        differences.length === 0
+          ? div(
+              { class: "alert alert-info" },
+              req.__("No differences found. The current version matches this snapshot.")
+            )
+          : div(
+              h5(req.__("Changes that will be applied:")),
+              mkTable(
+                [
+                  {
+                    label: req.__("Field"),
+                    key: (r) => code(r.field),
+                  },
+                  {
+                    label: req.__("Current Value"),
+                    key: (r) =>
+                      div(
+                        { class: "text-danger", style: "max-width: 400px; overflow: auto;" },
+                        formatValue(r.current)
+                      ),
+                  },
+                  {
+                    label: req.__("Snapshot Value"),
+                    key: (r) =>
+                      div(
+                        { class: "text-success", style: "max-width: 400px; overflow: auto;" },
+                        formatValue(r.snapshot)
+                      ),
+                  },
+                ],
+                differences
+              )
+            ),
+        div(
+          { class: "mt-3" },
+          post_btn(
+            addOnDoneRedirect(
+              `/admin/snapshot-restore/${type}/${name}/${id}`,
+              req
+            ),
+            req.__("Confirm Restore"),
+            req.csrfToken(),
+            { btnClass: "btn-primary" }
+          ),
+          " ",
+          a(
+            {
+              href: "javascript:void(0)",
+              class: "btn btn-secondary",
+              onclick: "close_saltcorn_modal()",
+            },
+            req.__("Cancel")
+          )
+        )
+      )
     );
   })
 );
