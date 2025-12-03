@@ -925,7 +925,7 @@ router.get(
             key: (r) =>
               a(
                 {
-                  href: `javascript:ajax_modal('/admin/snapshot-preview/${type}/${encodeURIComponent(name)}/${r.id}')`,
+                  href: `javascript:ajax_modal('/admin/snapshot-preview/${encodeURIComponent(type)}/${encodeURIComponent(name)}/${encodeURIComponent(String(r.id))}')`,
                   class: "btn btn-primary btn-sm",
                 },
                 i({ class: "fas fa-eye me-1" }),
