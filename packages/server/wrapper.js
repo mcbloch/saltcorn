@@ -59,14 +59,30 @@ const get_menu = (req) => {
   ].filter((s) => s);
 };
 /**
+ * Escape HTML entities in a string for safe insertion into HTML attributes
+ * @param {string} str
+ * @returns {string}
+ */
+const escapeHtml = (str) => {
+  if (!str) return "";
+  return String(str)
+    .replace(/&/g, "&amp;")
+    .replace(/"/g, "&quot;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;");
+};
+
+/**
  * Get Headers
  * @param req
  * @param version_tag
  * @param description
  * @param extras
+ * @param {object} ogMeta - Open Graph metadata
+ * @param {string} ogMeta.title - Page title for og:title
  * @returns {*[]}
  */
-const get_headers = (req, version_tag, description, extras = []) => {
+const get_headers = (req, version_tag, description, extras = [], ogMeta = {}) => {
   const state = getState();
   const favicon = state.getConfig("favicon_id", null);
   const notification_in_menu = JSON.stringify(
@@ -90,10 +106,76 @@ const get_headers = (req, version_tag, description, extras = []) => {
   const meta_description = description
     ? [
         {
-          headerTag: `<meta name="description" content="${description}">`,
+          headerTag: `<meta name="description" content="${escapeHtml(description)}">`,
         },
       ]
     : [];
+
+  // Open Graph meta tags for SEO and social media sharing
+  const ogHeaders = [];
+  const site_name = state.getConfig("site_name", "Saltcorn");
+  const base_url = state.getConfig("base_url", "");
+  const site_logo_id = state.getConfig("site_logo_id", "");
+
+  // og:title - use page title or site name as fallback
+  const ogTitle = ogMeta.title || site_name;
+  ogHeaders.push({
+    headerTag: `<meta property="og:title" content="${escapeHtml(ogTitle)}">`,
+  });
+
+  // og:type - default to website
+  ogHeaders.push({
+    headerTag: `<meta property="og:type" content="website">`,
+  });
+
+  // og:description - use page description if available
+  if (description) {
+    ogHeaders.push({
+      headerTag: `<meta property="og:description" content="${escapeHtml(description)}">`,
+    });
+  }
+
+  // og:url - use base_url + request path
+  if (base_url) {
+    const pageUrl = base_url.replace(/\/$/, "") + req.originalUrl;
+    ogHeaders.push({
+      headerTag: `<meta property="og:url" content="${escapeHtml(pageUrl)}">`,
+    });
+  }
+
+  // og:site_name
+  ogHeaders.push({
+    headerTag: `<meta property="og:site_name" content="${escapeHtml(site_name)}">`,
+  });
+
+  // og:image - use site logo if available
+  const hasImage = site_logo_id && site_logo_id !== "0" && base_url;
+  const imageUrl = hasImage
+    ? base_url.replace(/\/$/, "") + `/files/serve/${site_logo_id}`
+    : null;
+  if (imageUrl) {
+    ogHeaders.push({
+      headerTag: `<meta property="og:image" content="${escapeHtml(imageUrl)}">`,
+    });
+  }
+
+  // Twitter Card meta tags
+  ogHeaders.push({
+    headerTag: `<meta name="twitter:card" content="summary">`,
+  });
+  ogHeaders.push({
+    headerTag: `<meta name="twitter:title" content="${escapeHtml(ogTitle)}">`,
+  });
+  if (description) {
+    ogHeaders.push({
+      headerTag: `<meta name="twitter:description" content="${escapeHtml(description)}">`,
+    });
+  }
+  if (imageUrl) {
+    ogHeaders.push({
+      headerTag: `<meta name="twitter:image" content="${escapeHtml(imageUrl)}">`,
+    });
+  }
   const locale = req.getLocale();
   const stdHeaders = [
     {
@@ -182,6 +264,7 @@ const get_headers = (req, version_tag, description, extras = []) => {
     ...stdHeaders,
     ...iconHeader,
     ...meta_description,
+    ...ogHeaders,
     ...state_headers,
     ...extras,
     ...from_cfg,
@@ -315,7 +398,7 @@ module.exports = (version_tag) =>
             typeof opts === "string" ? false : opts.requestFluidLayout,
           alerts,
           body: html.length === 1 ? html[0] : html.join(""),
-          headers: get_headers(req, version_tag, opts.description, pageHeaders),
+          headers: get_headers(req, version_tag, opts.description, pageHeaders, { title }),
           role,
           req,
           bodyClass,
