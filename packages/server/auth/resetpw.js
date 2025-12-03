@@ -12,39 +12,73 @@ const { get_base_url } = require("../routes/utils");
 const View = require("@saltcorn/data/models/view");
 
 /**
+ * Get the locale to use for a user's email
+ * @param {object} user - the target user
+ * @returns {string} the locale to use
+ */
+const getUserEmailLocale = (user) => {
+  return user.language || getState().getConfig("default_locale", "en");
+};
+
+/**
+ * Create a translation function for a specific locale
+ * @param {string} locale - the locale to translate for
+ * @returns {function} translation function
+ */
+const getTranslatorForLocale = (locale) => {
+  const state = getState();
+  return (s, ...args) => {
+    let translated = state.i18n.__({ phrase: s, locale }) || s;
+    // Handle sprintf-style substitutions like "Hi %s"
+    if (args.length > 0) {
+      args.forEach((arg) => {
+        translated = translated.replace("%s", arg);
+      });
+    }
+    return translated;
+  };
+};
+
+/**
  * @param {string} link
  * @param {object} user
- * @param {object} req
- * @returns {void}
+ * @param {object|function} reqOrTranslator - either a request object with __ method, or a translation function
+ * @param {object} options
+ * @returns {object} email object
  */
-const generate_email = (link, user, req, options) => {
+const generate_email = (link, user, reqOrTranslator, options) => {
+  // Support both req object (legacy) and direct translation function
+  const __ =
+    typeof reqOrTranslator === "function"
+      ? reqOrTranslator
+      : reqOrTranslator.__;
   const subject = options?.creating
-    ? req.__(`Welcome to %s`, getState().getConfig("site_name", "Saltcorn"))
-    : req.__("Reset password instructions");
+    ? __(`Welcome to %s`, getState().getConfig("site_name", "Saltcorn"))
+    : __("Reset password instructions");
   const initial = options?.creating
-    ? req.__(
+    ? __(
         "We have created an account for you on %s. You can set your new password through this link: ",
         getState().getConfig("site_name", "Saltcorn")
       )
     : options?.from_admin
-      ? req.__(
+      ? __(
           "We request that you change your password on %s. You can set your new password through this link: ",
           getState().getConfig("site_name", "Saltcorn")
         )
-      : req.__(
+      : __(
           "You have requested a link to change your password. You can do this through this link:"
         );
   const base_url = getState().getConfig("base_url", "");
   const final =
     options?.creating && base_url
-      ? req.__(
+      ? __(
           "Use this link to access the application once you have set your password: %s",
           `<a href="${base_url}">${base_url}</a>`
         )
       : "";
   const finalTxt =
     options?.creating && base_url
-      ? req.__(
+      ? __(
           "Use this link to access the application once you have set your password: %s",
           base_url
         )
@@ -53,7 +87,7 @@ const generate_email = (link, user, req, options) => {
     from: getState().getConfig("email_from"),
     to: user.email,
     subject,
-    text: `${req.__("Hi %s", user.email)},
+    text: `${__("Hi %s", user.email)},
 
 ${initial}
 
@@ -61,28 +95,27 @@ ${link}
 
 ${
   !options?.creating && !options?.from_admin
-    ? req.__("If you did not request this, please ignore this email.") + "\n"
+    ? __("If you did not request this, please ignore this email.") + "\n"
     : ""
 }
-${req.__(
+${__(
   "Your password will not change until you access the link above and set a new one."
 )}
 
 ${finalTxt}
 `,
-    html: `${req.__("Hi %s", user.email)},<br /><br />    
+    html: `${__("Hi %s", user.email)},<br /><br />    
   ${initial}<br />
 <br />
-<a href="${link}">${req.__("Change my password")}</a><br />
+<a href="${link}">${__("Change my password")}</a><br />
 <br />
 ${
   !options?.creating && !options?.from_admin
-    ? req.__("If you did not request this, please ignore this email.") +
-      "<br />"
+    ? __("If you did not request this, please ignore this email.") + "<br />"
     : ""
 }
 <br />
-${req.__(
+${__(
   "Your password will not change until you access the link above and set a new one."
 )}<br />
 ${final ? `<br />${final}<br />` : ""}
@@ -102,27 +135,36 @@ const send_reset_email = async (user, req, options = {}) => {
     "reset_password_email_view",
     false
   );
+
+  // Use the target user's preferred language, not the admin's
+  const userLocale = getUserEmailLocale(user);
+  const __ = getTranslatorForLocale(userLocale);
+
   let email;
   if (reset_password_email_view_name) {
     const reset_password_email_view = await View.findOne({
       name: reset_password_email_view_name,
     });
     if (reset_password_email_view) {
-      const html = await viewToEmailHtml(reset_password_email_view, {
-        id: user.id,
-        _unhashed_reset_password_token: token,
-      });
+      const html = await viewToEmailHtml(
+        reset_password_email_view,
+        {
+          id: user.id,
+          _unhashed_reset_password_token: token,
+        },
+        { locale: userLocale }
+      );
       email = {
         from: getState().getConfig("email_from"),
         to: user.email,
         subject:
           reset_password_email_view.attributes?.page_title ||
-          `${req.__("Hi %s", user.email)}`,
+          __("Hi %s", user.email),
         html,
       };
     }
   }
-  if (!email) email = generate_email(link, user, req, options);
+  if (!email) email = generate_email(link, user, __, options);
   await transporter.sendMail(email);
 };
 
@@ -141,4 +183,10 @@ const get_reset_link = async (user, req) => {
   };
 };
 
-module.exports = { send_reset_email, get_reset_link, generate_email };
+module.exports = {
+  send_reset_email,
+  get_reset_link,
+  generate_email,
+  getUserEmailLocale,
+  getTranslatorForLocale,
+};
