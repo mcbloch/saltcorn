@@ -39,6 +39,7 @@ const diagram = require("./diagram");
 const registry = require("./registry");
 const sync = require("./sync");
 const entities = require("./entities");
+const performance = require("./performance");
 
 module.exports =
   /**
@@ -83,4 +84,5 @@ module.exports =
     app.use("/registry-editor", registry);
     app.use("/sync", sync);
     app.use("/entities", entities);
+    app.use("/admin/performance", performance);
   };
