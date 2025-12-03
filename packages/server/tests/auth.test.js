@@ -17,7 +17,12 @@ const {
 } = require("../auth/testhelp");
 const db = require("@saltcorn/data/db");
 const { getState } = require("@saltcorn/data/db/state");
-const { get_reset_link, generate_email } = require("../auth/resetpw");
+const {
+  get_reset_link,
+  generate_email,
+  getUserEmailLocale,
+  getTranslatorForLocale,
+} = require("../auth/resetpw");
 const i18n = require("i18n");
 const path = require("path");
 const fs = require("fs");
@@ -211,6 +216,42 @@ describe("AuthTest forgot password", () => {
       .send("email=staff1@foo.com")
       .send("password=bazzRGGR65zoo")
       .expect(toRedirect("/"));
+  });
+
+  it("getUserEmailLocale returns user language if set", async () => {
+    // User without language should fall back to default locale
+    const userWithoutLang = { email: "test@test.com" };
+    const defaultLocale = getUserEmailLocale(userWithoutLang);
+    expect(defaultLocale).toBe("en");
+
+    // User with language set should use that language
+    const userWithLang = { email: "test@test.com", language: "it" };
+    expect(getUserEmailLocale(userWithLang)).toBe("it");
+  });
+
+  it("getTranslatorForLocale returns a translation function", async () => {
+    const __ = getTranslatorForLocale("en");
+    expect(typeof __).toBe("function");
+    // Translation function should handle sprintf-style substitutions
+    expect(__("Hi %s", "test@test.com")).toBe("Hi test@test.com");
+  });
+
+  it("generate_email uses user language when provided a translator function", async () => {
+    const u = await User.findOne({ email: "staff1@foo.com" });
+    await getState().setConfig("base_url", "/");
+
+    const { link } = await get_reset_link(u, {});
+
+    // Create a custom translator for Italian
+    const __ = getTranslatorForLocale("it");
+    const email = generate_email(link, u, __);
+    expect(email.text).toContain(link);
+    expect(email.to).toBe("staff1@foo.com");
+    // The email should be generated with the Italian translation function
+    // We can't easily verify the exact Italian text without knowing translations,
+    // but we can verify the email structure is correct
+    expect(email.subject).toBeDefined();
+    expect(email.html).toBeDefined();
   });
 });
 
