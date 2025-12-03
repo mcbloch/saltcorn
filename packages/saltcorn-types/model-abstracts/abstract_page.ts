@@ -8,6 +8,7 @@ export interface AbstractPage {
   name: string;
   layout: Layout;
   min_role: number;
+  version?: number;
   connected_objects: () => ConnectedObjects;
   getTags(): Promise<Array<AbstractTag>>;
 }
@@ -18,6 +19,7 @@ export type PageCfg = {
   description: string;
   min_role: number;
   id?: number;
+  version?: number;
   layout: string | Layout | GenObj;
   fixed_states?: string | any;
   attributes?: any;

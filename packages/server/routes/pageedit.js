@@ -32,7 +32,7 @@ const {
   setRole,
   isAdminOrHasConfigMinRole,
 } = require("./utils.js");
-const { asyncMap } = require("@saltcorn/data/utils");
+const { asyncMap, VersionConflict } = require("@saltcorn/data/utils");
 const {
   mkTable,
   renderForm,
@@ -264,6 +264,7 @@ const pageBuilderData = async (req, context) => {
     allowMultiStepAction: true,
     page_name: context.name,
     page_id: context.id,
+    page_version: context.version || 1,
     mode: "page",
     roles,
     icons,
@@ -757,19 +758,48 @@ router.post(
   isAdmin,
   error_catcher(async (req, res) => {
     const { id } = req.params;
+    const { layout, version } = req.body || {};
 
-    if (id && (req.body || {}).layout) {
-      await Page.update(+id, { layout: (req.body || {}).layout });
-      const page = await Page.findOne({ id });
-      await getState().refresh_pages();
+    if (id && layout) {
+      try {
+        let newVersion;
+        // If version is provided, use version-checked update
+        if (typeof version === "number") {
+          newVersion = await Page.updateWithVersion(
+            +id,
+            { layout },
+            version
+          );
+        } else {
+          // Legacy: no version checking for backward compatibility
+          await Page.update(+id, { layout });
+          const updatedPage = await Page.findOne({ id });
+          newVersion = updatedPage?.version || 1;
+        }
+        const page = await Page.findOne({ id });
+        await getState().refresh_pages();
 
-      Trigger.emitEvent("AppChange", `Page ${page.name}`, req.user, {
-        entity_type: "Page",
-        entity_name: page.name,
-      });
-      res.json({
-        success: "ok",
-      });
+        Trigger.emitEvent("AppChange", `Page ${page.name}`, req.user, {
+          entity_type: "Page",
+          entity_name: page.name,
+        });
+        res.json({
+          success: "ok",
+          version: newVersion,
+        });
+      } catch (e) {
+        if (e instanceof VersionConflict) {
+          res.json({
+            error: req.__(
+              "This page has been modified by another user or in another tab. Please refresh to get the latest version before saving."
+            ),
+            version_conflict: true,
+            current_version: e.currentVersion,
+          });
+        } else {
+          throw e;
+        }
+      }
     } else {
       res.json({ error: req.__("Unable to save: No page or no layout") });
     }

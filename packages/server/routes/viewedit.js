@@ -35,7 +35,7 @@ const Tag = require("@saltcorn/data/models/tag");
 const TagEntry = require("@saltcorn/data/models/tag_entry");
 
 const db = require("@saltcorn/data/db");
-const { sleep } = require("@saltcorn/data/utils");
+const { sleep, VersionConflict } = require("@saltcorn/data/utils");
 
 const { add_to_menu } = require("@saltcorn/admin-models/models/pack");
 
@@ -686,6 +686,7 @@ const respondWorkflow = (view, wf, wfres, req, res, table) => {
     );
   else if (wfres.renderBuilder) {
     wfres.renderBuilder.options.view_id = view.id;
+    wfres.renderBuilder.options.view_version = view.version || 1;
     res.sendWrap(
       {
         title: req.__(`%s configuration`, view.name),
@@ -894,17 +895,47 @@ router.post(
   isAdminOrHasConfigMinRole("min_role_edit_views"),
   error_catcher(async (req, res) => {
     const { id } = req.params;
+    const { version, ...bodyRest } = req.body || {};
 
-    if (id && (req.body || {})) {
-      const exview = await View.findOne({ id });
-      let newcfg = { ...exview.configuration, ...(req.body || {}) };
-      await View.update({ configuration: newcfg }, +id);
-      await getState().refresh_views();
-      Trigger.emitEvent("AppChange", `View ${exview.name}`, req.user, {
-        entity_type: "View",
-        entity_name: exview.name,
-      });
-      res.json({ success: "ok" });
+    if (id && bodyRest) {
+      try {
+        const exview = await View.findOne({ id });
+        let newcfg = { ...exview.configuration, ...bodyRest };
+        let newVersion;
+
+        // If version is provided, use version-checked update
+        if (typeof version === "number") {
+          newVersion = await View.updateWithVersion(
+            { configuration: newcfg },
+            +id,
+            version
+          );
+        } else {
+          // Legacy: no version checking for backward compatibility
+          await View.update({ configuration: newcfg }, +id);
+          const updatedView = View.findOne({ id });
+          newVersion = updatedView?.version || 1;
+        }
+
+        await getState().refresh_views();
+        Trigger.emitEvent("AppChange", `View ${exview.name}`, req.user, {
+          entity_type: "View",
+          entity_name: exview.name,
+        });
+        res.json({ success: "ok", version: newVersion });
+      } catch (e) {
+        if (e instanceof VersionConflict) {
+          res.json({
+            error: req.__(
+              "This view has been modified by another user or in another tab. Please refresh to get the latest version before saving."
+            ),
+            version_conflict: true,
+            current_version: e.currentVersion,
+          });
+        } else {
+          throw e;
+        }
+      }
     } else {
       res.json({ error: req.__("Unable to save: No view") });
     }

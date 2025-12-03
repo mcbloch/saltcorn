@@ -130,6 +130,20 @@ class NotAuthorized extends Error {
     this.severity = 5; //syslog equivalent severity level
   }
 }
+
+class VersionConflict extends Error {
+  headline: string;
+  httpCode: number;
+  severity: number;
+  currentVersion: number;
+  constructor(message: string, currentVersion: number) {
+    super(message);
+    this.httpCode = 409;
+    this.headline = "Version Conflict";
+    this.severity = 5;
+    this.currentVersion = currentVersion;
+  }
+}
 type VType = {
   or?: any[];
   in?: any[];
@@ -665,6 +679,7 @@ export = {
   InvalidAdminAction,
   InvalidConfiguration,
   NotAuthorized,
+  VersionConflict,
   satisfies,
   getLines,
   removeAllWhiteSpace,
