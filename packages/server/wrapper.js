@@ -149,8 +149,11 @@ const get_headers = (req, version_tag, description, extras = [], ogMeta = {}) =>
   });
 
   // og:image - use site logo if available
-  if (site_logo_id && site_logo_id !== "0" && base_url) {
-    const imageUrl = base_url.replace(/\/$/, "") + `/files/serve/${site_logo_id}`;
+  const hasImage = site_logo_id && site_logo_id !== "0" && base_url;
+  const imageUrl = hasImage
+    ? base_url.replace(/\/$/, "") + `/files/serve/${site_logo_id}`
+    : null;
+  if (imageUrl) {
     ogHeaders.push({
       headerTag: `<meta property="og:image" content="${escapeHtml(imageUrl)}">`,
     });
@@ -168,8 +171,7 @@ const get_headers = (req, version_tag, description, extras = [], ogMeta = {}) =>
       headerTag: `<meta name="twitter:description" content="${escapeHtml(description)}">`,
     });
   }
-  if (site_logo_id && site_logo_id !== "0" && base_url) {
-    const imageUrl = base_url.replace(/\/$/, "") + `/files/serve/${site_logo_id}`;
+  if (imageUrl) {
     ogHeaders.push({
       headerTag: `<meta name="twitter:image" content="${escapeHtml(imageUrl)}">`,
     });
