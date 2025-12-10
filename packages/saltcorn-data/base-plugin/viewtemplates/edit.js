@@ -1552,7 +1552,8 @@ const runPost = async (
                   (file_field.attributes &&
                     +file_field.attributes.min_role_read) ||
                     1,
-                  file_field?.attributes?.folder
+                  file_field?.attributes?.folder,
+                  file_field.attributes
                 );
                 childRow[file_field.name] = file.path_to_serve;
               }
@@ -2131,7 +2132,8 @@ const prepare = async (
           req.files[field.name],
           req.user ? req.user.id : null,
           (field.attributes && +field.attributes.min_role_read) || 1,
-          field?.attributes?.folder
+          field?.attributes?.folder,
+          field.attributes
         );
         row[field.name] = file.path_to_serve;
         form.values[field.name] = file.path_to_serve;
