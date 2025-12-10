@@ -1734,7 +1734,8 @@ module.exports = {
                   req.files[field.name],
                   user ? user.id : null,
                   (field.attributes && +field.attributes.min_role_read) || 1,
-                  folder
+                  folder,
+                  field.attributes
                 );
                 row[field.name] = file.path_to_serve;
                 processed = true;

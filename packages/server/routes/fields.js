@@ -427,6 +427,71 @@ const fieldFlow = (req) =>
                   ),
                   default: default_file_accept_filter,
                 },
+                {
+                  name: "process_images",
+                  type: "Bool",
+                  label: req.__("Process images on upload"),
+                  sublabel: req.__(
+                    "Automatically resize, compress, and/or convert images when uploaded"
+                  ),
+                },
+                {
+                  name: "target_width",
+                  type: "Integer",
+                  label: req.__("Target width (pixels)"),
+                  sublabel: req.__(
+                    "Maximum width for uploaded images. Leave empty to keep original width."
+                  ),
+                  showIf: { process_images: true },
+                  attributes: { min: 1 },
+                },
+                {
+                  name: "target_height",
+                  type: "Integer",
+                  label: req.__("Target height (pixels)"),
+                  sublabel: req.__(
+                    "Maximum height for uploaded images. Leave empty to keep original height."
+                  ),
+                  showIf: { process_images: true },
+                  attributes: { min: 1 },
+                },
+                {
+                  name: "target_format",
+                  type: "String",
+                  label: req.__("Target format"),
+                  sublabel: req.__(
+                    "Convert images to this format. WebP offers best compression."
+                  ),
+                  showIf: { process_images: true },
+                  attributes: {
+                    options: [
+                      { value: "", label: "Keep original format" },
+                      { value: "webp", label: "WebP" },
+                      { value: "jpeg", label: "JPEG" },
+                      { value: "png", label: "PNG" },
+                    ],
+                  },
+                },
+                {
+                  name: "compression_quality",
+                  type: "Integer",
+                  label: req.__("Compression quality (1-100)"),
+                  sublabel: req.__(
+                    "Higher values mean better quality but larger file size. Recommended: 80-90"
+                  ),
+                  showIf: { process_images: true },
+                  default: 85,
+                  attributes: { min: 1, max: 100 },
+                },
+                {
+                  name: "keep_original",
+                  type: "Bool",
+                  label: req.__("Keep original file"),
+                  sublabel: req.__(
+                    "Store both the original and processed versions of the image"
+                  ),
+                  showIf: { process_images: true },
+                },
               ],
             });
           } else {

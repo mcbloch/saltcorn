@@ -610,11 +610,12 @@ class File {
     },
     user_id: number,
     min_role_read: number = 1,
-    folder: string = "/"
+    folder: string = "/",
+    fieldAttributes?: any
   ): Promise<File> {
     if (Array.isArray(file)) {
       return await asyncMap(file, (f: any) =>
-        File.from_req_files(f, user_id, min_role_read, folder)
+        File.from_req_files(f, user_id, min_role_read, folder, fieldAttributes)
       );
     } else {
       // get path to file
@@ -623,15 +624,82 @@ class File {
       const [mime_super, mime_sub] = file.mimetype.split("/");
       // move file in file system to newPath
       await file.mv(newPath);
+
+      // Process images if attributes specify it and this is an image
+      let finalPath = newPath;
+      let finalFilename = file.name;
+      let finalMimeSuper = mime_super;
+      let finalMimeSub = mime_sub;
+      let originalPath: string | undefined;
+
+      if (
+        fieldAttributes?.process_images &&
+        mime_super === "image" &&
+        !file.s3object
+      ) {
+        try {
+          // Dynamic import to avoid circular dependencies
+          const processImage = isNode()
+            ? require("./image-processor-helper").processUploadedImage
+            : null;
+
+          if (processImage) {
+            const result = await processImage({
+              filePath: newPath,
+              mimetype: file.mimetype,
+              fieldAttributes,
+            });
+
+            if (result.processedPath && result.processedPath !== newPath) {
+              finalPath = result.processedPath;
+              finalFilename = path.basename(finalPath);
+
+              // Update mime type if format changed
+              const newMimetype = File.nameToMimeType(finalPath);
+              if (newMimetype) {
+                [finalMimeSuper, finalMimeSub] = newMimetype.split("/");
+              }
+            }
+
+            originalPath = result.originalPath;
+          }
+        } catch (err: any) {
+          console.error("Image processing failed:", err);
+          // Continue with original file if processing fails
+        }
+      }
+
+      // Get final file size
+      let finalSize = file.size;
+      try {
+        const stats = await fsp.stat(finalPath);
+        finalSize = stats.size;
+      } catch (err) {
+        // Use original size if stat fails
+      }
+
+      // Store reference to original if kept
+      if (originalPath) {
+        try {
+          await xattr_set(
+            finalPath,
+            "user.saltcorn.original_path",
+            originalPath
+          );
+        } catch (err) {
+          console.error("Failed to set original path attribute:", err);
+        }
+      }
+
       // create file
       return await File.create({
-        filename: file.name,
-        location: newPath,
+        filename: finalFilename,
+        location: finalPath,
         uploaded_at: new Date(),
-        size_kb: Math.round(file.size / 1024),
+        size_kb: Math.round(finalSize / 1024),
         user_id,
-        mime_super,
-        mime_sub,
+        mime_super: finalMimeSuper,
+        mime_sub: finalMimeSub,
         min_role_read,
         s3_store: !!file.s3object,
       });
