@@ -635,34 +635,30 @@ class File {
       if (
         fieldAttributes?.process_images &&
         mime_super === "image" &&
-        !file.s3object
+        !file.s3object &&
+        isNode()
       ) {
         try {
-          // Dynamic import to avoid circular dependencies
-          const processImage = isNode()
-            ? require("./image-processor-helper").processUploadedImage
-            : null;
+          // Load image processor helper (only available in Node.js server context)
+          const imageProcessorHelper = require("./image-processor-helper");
+          const result = await imageProcessorHelper.processUploadedImage({
+            filePath: newPath,
+            mimetype: file.mimetype,
+            fieldAttributes,
+          });
 
-          if (processImage) {
-            const result = await processImage({
-              filePath: newPath,
-              mimetype: file.mimetype,
-              fieldAttributes,
-            });
+          if (result.processedPath && result.processedPath !== newPath) {
+            finalPath = result.processedPath;
+            finalFilename = path.basename(finalPath);
 
-            if (result.processedPath && result.processedPath !== newPath) {
-              finalPath = result.processedPath;
-              finalFilename = path.basename(finalPath);
-
-              // Update mime type if format changed
-              const newMimetype = File.nameToMimeType(finalPath);
-              if (newMimetype) {
-                [finalMimeSuper, finalMimeSub] = newMimetype.split("/");
-              }
+            // Update mime type if format changed
+            const newMimetype = File.nameToMimeType(finalPath);
+            if (newMimetype) {
+              [finalMimeSuper, finalMimeSub] = newMimetype.split("/");
             }
-
-            originalPath = result.originalPath;
           }
+
+          originalPath = result.originalPath;
         } catch (err: any) {
           console.error("Image processing failed:", err);
           // Continue with original file if processing fails
