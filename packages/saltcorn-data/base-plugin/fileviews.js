@@ -269,7 +269,7 @@ module.exports = {
           "data-on-cloned": "clear_cloned_file_input(this)",
           accept: attrs.files_accept_filter || undefined,
           required: !!reqd,
-          ...(customInput ? { hidden: true } : {}),
+          ...(customInput ? { style: "position:absolute;opacity:0;pointer-events:none;width:1px;height:1px;" } : {}),
         }) +
         (customInput ? buildCustomInput(id, attrs, file_name) : "") +
         span({ class: "file-upload-exising" }, text(file_name || ""))
@@ -478,7 +478,7 @@ module.exports = {
             "data-on-cloned": "$(this).val('')",
             accept: `${mimebase}/*;capture=${attrs.device}`,
             required: !!reqd,
-            ...(customInput ? { hidden: true } : {}),
+            ...(customInput ? { style: "position:absolute;opacity:0;pointer-events:none;width:1px;height:1px;" } : {}),
           }) + (customInput ? buildCustomInput(id, attrs) : "")
         );
       }
