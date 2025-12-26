@@ -41,6 +41,9 @@ const buildNodeFileUrl = (filePath, cfg = {}, opts = {}) =>
 const buildNodeFileLinkUrl = (filePath, cfg = {}) =>
   buildNodeFileUrl(filePath, cfg);
 
+// CSS to visually hide file input while keeping it in validation flow
+const HIDDEN_FILE_INPUT_STYLE = "position:absolute;opacity:0;pointer-events:none;width:1px;height:1px;";
+
 const btnStyles = [
   { name: "default", label: "Default selector" },
   { name: "btn btn-primary", label: "Primary button" },
@@ -269,7 +272,7 @@ module.exports = {
           "data-on-cloned": "clear_cloned_file_input(this)",
           accept: attrs.files_accept_filter || undefined,
           required: !!reqd,
-          ...(customInput ? { style: "position:absolute;opacity:0;pointer-events:none;width:1px;height:1px;" } : {}),
+          ...(customInput ? { style: HIDDEN_FILE_INPUT_STYLE } : {}),
         }) +
         (customInput ? buildCustomInput(id, attrs, file_name) : "") +
         span({ class: "file-upload-exising" }, text(file_name || ""))
@@ -478,7 +481,7 @@ module.exports = {
             "data-on-cloned": "$(this).val('')",
             accept: `${mimebase}/*;capture=${attrs.device}`,
             required: !!reqd,
-            ...(customInput ? { style: "position:absolute;opacity:0;pointer-events:none;width:1px;height:1px;" } : {}),
+            ...(customInput ? { style: HIDDEN_FILE_INPUT_STYLE } : {}),
           }) + (customInput ? buildCustomInput(id, attrs) : "")
         );
       }
