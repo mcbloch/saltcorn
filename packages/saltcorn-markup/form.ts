@@ -701,6 +701,7 @@ const innerField =
               name: text_attr(name),
               accept: hdr.attributes?.accept,
               id: `input${text_attr(name)}`,
+              ...(hdr.required ? { required: true } : {}),
             }),
           ].join("");
       case "search":

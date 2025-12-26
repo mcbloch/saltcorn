@@ -268,6 +268,7 @@ module.exports = {
           readonly: attrs.readonly,
           "data-on-cloned": "clear_cloned_file_input(this)",
           accept: attrs.files_accept_filter || undefined,
+          required: !!reqd,
           ...(customInput ? { hidden: true } : {}),
         }) +
         (customInput ? buildCustomInput(id, attrs, file_name) : "") +
@@ -476,6 +477,7 @@ module.exports = {
             type: "file",
             "data-on-cloned": "$(this).val('')",
             accept: `${mimebase}/*;capture=${attrs.device}`,
+            required: !!reqd,
             ...(customInput ? { hidden: true } : {}),
           }) + (customInput ? buildCustomInput(id, attrs) : "")
         );

@@ -324,4 +324,58 @@ describe("renderFormLayout", () => {
       `<input type=\"text\" class=\"form-control  \" data-fieldname=\"first_name\" name=\"first_name\" id=\"inputfirst_name\"><input type=\"text\" class=\"form-control  \" data-fieldname=\"last_name\" name=\"last_name\" id=\"inputlast_name\">`
     );
   });
+
+  it("renders file input with required attribute", () => {
+    const form: Form = {
+      action: "/upload",
+      fields: [
+        {
+          name: "document",
+          label: "Upload Document",
+          input_type: "file",
+          form_name: "document",
+          required: true,
+          attributes: {},
+          is_fkey: false,
+        },
+      ],
+      errors: {},
+      values: {},
+      viewname: "fileuploadform",
+      formStyle: "",
+      methodGET: false,
+      xhrSubmit: false,
+      req: {},
+    };
+    const result = renderForm(form, "");
+    expect(result).toContain('type="file"');
+    expect(result).toContain('required');
+  });
+
+  it("renders file input without required attribute when not required", () => {
+    const form: Form = {
+      action: "/upload",
+      fields: [
+        {
+          name: "document",
+          label: "Upload Document",
+          input_type: "file",
+          form_name: "document",
+          required: false,
+          attributes: {},
+          is_fkey: false,
+        },
+      ],
+      errors: {},
+      values: {},
+      viewname: "fileuploadform",
+      formStyle: "",
+      methodGET: false,
+      xhrSubmit: false,
+      req: {},
+    };
+    const result = renderForm(form, "");
+    expect(result).toContain('type="file"');
+    expect(result).not.toContain('required');
+  });
 });
