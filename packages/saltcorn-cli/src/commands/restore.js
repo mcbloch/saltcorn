@@ -29,10 +29,10 @@ class RestoreCommand extends Command {
     const env = { ...process.env, PGPASSWORD: connobj.password };
     const res = spawnSync(
       "pg_restore",
-      ["-d", pgdb, "-U", pguser, "-h", pghost, fnm],
+      ["-d", pgdb, "-U", pguser, "-h", pghost, "--clean", "--if-exists", "--no-owner", fnm],
       { stdio: "inherit", env }
     );
-    this.exit(res.status);
+    if (res.status !== 0) this.exit(res.status);
   }
 
   /**
